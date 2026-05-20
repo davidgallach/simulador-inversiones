@@ -154,7 +154,7 @@ def histogram(
     median_v = float(np.median(final_values))
     fig = go.Figure()
     fig.add_trace(go.Histogram(
-        x=final_values, nbinsx=80,
+        x=final_values, xbins=dict(size=1000),
         marker=dict(color=_hex_to_rgba(color, 0.6)),
         name=strategy_label,
     ))
@@ -238,11 +238,11 @@ def compare_histograms(
 ) -> go.Figure:
     fig = go.Figure()
     fig.add_trace(go.Histogram(
-        x=final_puro, nbinsx=80, name=S.LABEL_PURO,
+        x=final_puro, xbins=dict(size=1000), name=S.LABEL_PURO,
         marker=dict(color=_hex_to_rgba(COLOR_PURO, 0.5)),
     ))
     fig.add_trace(go.Histogram(
-        x=final_tactico, nbinsx=80, name=S.LABEL_TACTICO,
+        x=final_tactico, xbins=dict(size=1000), name=S.LABEL_TACTICO,
         marker=dict(color=_hex_to_rgba(COLOR_TACTICO, 0.5)),
     ))
     fig.update_layout(
@@ -350,6 +350,9 @@ def spaghetti_chart(
     ys = np.concatenate([arr, sep[:, None]], axis=1).ravel()
 
     median = np.percentile(arr, 50, axis=0)
+    final_vals = arr[:, -1]
+    i_best = int(np.argmax(final_vals))
+    i_worst = int(np.argmin(final_vals))
 
     fig = go.Figure()
     fig.add_trace(go.Scattergl(
@@ -365,9 +368,20 @@ def spaghetti_chart(
         line=dict(color=color, width=2.5),
         name="Mediana",
     ))
+    fig.add_trace(go.Scatter(
+        x=months, y=arr[i_best], mode="lines",
+        line=dict(color=COLOR_PRICE, width=3),
+        name=f"Mejor final ({final_vals[i_best]:,.0f} €)",
+    ))
+    fig.add_trace(go.Scatter(
+        x=months, y=arr[i_worst], mode="lines",
+        line=dict(color="#d62728", width=3),
+        name=f"Peor final ({final_vals[i_worst]:,.0f} €)",
+    ))
     fig.update_layout(
         title=f"{S.MC_SPAGHETTI} — {strategy_label} — {investment_name}",
         xaxis_title=S.AXIS_MONTH,
         yaxis_title=S.AXIS_VALUE_EUR,
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, x=0),
     )
     return fig
