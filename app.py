@@ -11,8 +11,9 @@ from metrics import (
     cagr,
     max_drawdown,
     percentiles,
-    prob_below,
+    prob_loss_given_ruin,
     prob_profit_above,
+    prob_ruin_path,
     sharpe_ratio,
     total_return,
     twr_annualized,
@@ -297,7 +298,12 @@ def _render_montecarlo_tab() -> None:
     for label, strat in [(S.LABEL_PURO, mc.puro), (S.LABEL_TACTICO, mc.tactico)]:
         prob_rows.append({
             S.HIST_COL_STRATEGY: label,
-            S.MC_PROB_RUIN: _format_pct(prob_below(strat.final_values, 1.0)),
+            S.MC_PROB_RUIN: _format_pct(prob_ruin_path(strat.trajectories)),
+            S.MC_PROB_LOSS_GIVEN_RUIN: _format_pct(
+                prob_loss_given_ruin(
+                    strat.trajectories, strat.final_values, strat.total_invested
+                )
+            ),
             S.MC_PROB_NEG: _format_pct(
                 float(np.mean(strat.final_values < strat.total_invested))
             ),

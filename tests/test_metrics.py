@@ -10,7 +10,9 @@ from metrics import (
     cagr,
     cashflows,
     max_drawdown,
+    prob_loss_given_ruin,
     prob_profit_above,
+    prob_ruin_path,
     volatility_annualized,
 )
 from strategies import StrategyResult, dca_puro
@@ -106,3 +108,44 @@ def test_prob_profit_above_strict_inequality():
     assert prob_profit_above(arr, total_invested=100.0, x=100.0) == pytest.approx(0.0)
     # x=99 → one passes.
     assert prob_profit_above(arr, total_invested=100.0, x=99.0) == pytest.approx(0.5)
+
+
+# --------- Path-based ruin ---------
+
+def test_prob_ruin_path_detects_intermediate_dip():
+    """A sim that dips below the threshold and recovers still counts as ruin."""
+    traj = np.array([
+        [1000.0, 1500.0, 2000.0],   # never dips → no ruin
+        [1000.0,    0.5, 2000.0],   # dips at t=1 and recovers → ruin
+        [1000.0, 1000.0,    0.2],   # dips at the end → ruin
+    ])
+    assert prob_ruin_path(traj, threshold=1.0) == pytest.approx(2 / 3)
+
+
+def test_prob_ruin_path_excludes_month_zero():
+    """If initial = 0, V_0 = 0 must not be flagged. Only t >= 1 counts."""
+    traj = np.array([
+        [0.0, 100.0, 200.0],   # never < 1 after t=0 → no ruin
+        [0.0,   0.5, 200.0],   # dips at t=1 → ruin
+    ])
+    assert prob_ruin_path(traj, threshold=1.0) == pytest.approx(0.5)
+
+
+def test_prob_loss_given_ruin_conditional():
+    """Among ruin sims, fraction ending with final < total_invested."""
+    traj = np.array([
+        [1000.0,    0.5, 1500.0],   # ruin, final 1500 > invested 1200 → no loss
+        [1000.0,    0.5,  500.0],   # ruin, final 500 < 1200 → loss
+        [1000.0, 1000.0,  800.0],   # no ruin (dropped, but never < 1)
+    ])
+    finals = traj[:, -1]
+    invested = np.array([1200.0, 1200.0, 1200.0])
+    # 2 sims hit ruin, 1 has a loss → 0.5.
+    assert prob_loss_given_ruin(traj, finals, invested) == pytest.approx(0.5)
+
+
+def test_prob_loss_given_ruin_no_ruin_is_nan():
+    """If no sim hits ruin, the conditional is undefined."""
+    traj = np.array([[1000.0, 1100.0, 1200.0]])
+    finals = traj[:, -1]
+    assert math.isnan(prob_loss_given_ruin(traj, finals, 1000.0))

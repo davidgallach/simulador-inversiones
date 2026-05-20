@@ -150,6 +150,40 @@ def prob_profit_above(final_values, total_invested: float, x: float) -> float:
     return float(np.mean((arr - total_invested) > x))
 
 
+def prob_ruin_path(trajectories, threshold: float = 1.0) -> float:
+    """Fraction of simulations whose portfolio value drops below `threshold`
+    at any t >= 1. Month 0 is excluded so an initial = 0 € setup does not
+    trivially flag every sim."""
+    arr = np.asarray(trajectories, dtype=float)
+    if arr.ndim != 2 or arr.shape[1] < 2:
+        return float("nan")
+    hit = np.any(arr[:, 1:] < threshold, axis=1)
+    return float(np.mean(hit))
+
+
+def prob_loss_given_ruin(
+    trajectories,
+    final_values,
+    total_invested,
+    threshold: float = 1.0,
+) -> float:
+    """Conditional probability: among sims that hit `< threshold` at any t >= 1,
+    fraction ending with final_value < total_invested. NaN if no sim hits ruin.
+    `total_invested` may be scalar or a per-sim array."""
+    traj = np.asarray(trajectories, dtype=float)
+    finals = np.asarray(final_values, dtype=float).ravel()
+    if traj.ndim != 2 or traj.shape[1] < 2 or finals.size != traj.shape[0]:
+        return float("nan")
+    hit = np.any(traj[:, 1:] < threshold, axis=1)
+    if not np.any(hit):
+        return float("nan")
+    inv = np.asarray(total_invested, dtype=float)
+    if inv.ndim == 0:
+        inv = np.full(finals.size, float(inv))
+    loss = finals < inv
+    return float(np.mean(loss[hit]))
+
+
 def percentiles(final_values, percentile_list=(10, 20, 30, 40, 60, 70, 80, 90)) -> dict:
     arr = np.asarray(final_values, dtype=float).ravel()
     if arr.size == 0:
