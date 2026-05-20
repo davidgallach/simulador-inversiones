@@ -14,6 +14,8 @@ from metrics import (
     prob_below,
     prob_profit_above,
     sharpe_ratio,
+    total_return,
+    twr_annualized,
     volatility_annualized,
 )
 from montecarlo import (
@@ -25,12 +27,15 @@ from montecarlo import (
 from plots import (
     cdf_chart,
     compare_cdfs,
+    compare_cdfs_returns,
     compare_histograms,
+    compare_histograms_returns,
     fan_chart,
     histogram,
     pdf_chart,
     portfolio_value_chart,
     price_chart,
+    spaghetti_chart,
     COLOR_PURO,
     COLOR_TACTICO,
 )
@@ -177,7 +182,9 @@ def _summary_row(label: str, res: StrategyResult) -> dict:
         S.HIST_COL_INVESTED: _format_eur(res.total_invested),
         S.HIST_COL_COMMITTED: _format_eur(res.committed),
         S.HIST_COL_FINAL: _format_eur(res.final_value),
+        S.HIST_COL_TOTAL_RETURN: _format_pct(total_return(res)),
         S.HIST_COL_CAGR: _format_pct(cagr(res)),
+        S.HIST_COL_TWR: _format_pct(twr_annualized(res)),
         S.HIST_COL_VOL: _format_pct(volatility_annualized(res)),
         S.HIST_COL_SHARPE: _format_ratio(sharpe_ratio(res)),
         S.HIST_COL_MDD: _format_pct(max_drawdown(res.values)),
@@ -225,7 +232,19 @@ def _render_historical_tab() -> None:
 
 # ---------------- Montecarlo tab ----------------
 
-def _strategy_stats_table(label: str, final_values: np.ndarray) -> pd.DataFrame:
+def _format_eur_with_return(value: float, base_invested: float) -> str:
+    """'12,345 € (+23.4 %)' — return % computed relative to base_invested."""
+    if base_invested is None or base_invested <= 0:
+        return _format_eur(value)
+    pct = (value / base_invested - 1.0) * 100.0
+    sign = "+" if pct >= 0 else ""
+    pct_str = f"{sign}{pct:.1f} %".replace(".", ",")
+    return f"{_format_eur(value)} ({pct_str})"
+
+
+def _strategy_stats_table(
+    label: str, final_values: np.ndarray, total_invested_mean: float
+) -> pd.DataFrame:
     pct = percentiles(final_values)
     rows = [
         (S.MC_STAT_MEAN, float(np.mean(final_values))),
@@ -234,7 +253,7 @@ def _strategy_stats_table(label: str, final_values: np.ndarray) -> pd.DataFrame:
     for p in (10, 20, 30, 40, 60, 70, 80, 90):
         rows.append((f"P{p}", pct[p]))
     df = pd.DataFrame(rows, columns=["Estadístico", label])
-    df[label] = df[label].map(_format_eur)
+    df[label] = df[label].map(lambda v: _format_eur_with_return(v, total_invested_mean))
     return df
 
 
@@ -260,10 +279,17 @@ def _render_montecarlo_tab() -> None:
 
     # --- Combined stats table (Puro + Táctico side by side) ---
     st.subheader(S.MC_STATS_TITLE)
-    stats_puro = _strategy_stats_table(S.LABEL_PURO, mc.puro.final_values)
-    stats_tactico = _strategy_stats_table(S.LABEL_TACTICO, mc.tactico.final_values)
+    mean_inv_puro = float(np.mean(mc.puro.total_invested))
+    mean_inv_tactico = float(np.mean(mc.tactico.total_invested))
+    stats_puro = _strategy_stats_table(S.LABEL_PURO, mc.puro.final_values, mean_inv_puro)
+    stats_tactico = _strategy_stats_table(
+        S.LABEL_TACTICO, mc.tactico.final_values, mean_inv_tactico
+    )
     combined = stats_puro.merge(stats_tactico, on="Estadístico")
     st.dataframe(combined, use_container_width=True, hide_index=True)
+    st.caption(
+        "Entre paréntesis: rendimiento total (%) = valor / total invertido medio − 1."
+    )
 
     # --- Probability table (recomputes live from cached arrays when X changes) ---
     st.subheader(S.MC_PROBS_TITLE)
@@ -289,6 +315,10 @@ def _render_montecarlo_tab() -> None:
         st.markdown(f"### {label}")
         mean_invested = float(np.mean(strat.total_invested))
 
+        st.plotly_chart(
+            spaghetti_chart(strat.trajectories, label, color, name),
+            use_container_width=True,
+        )
         st.plotly_chart(
             fan_chart(strat.percentile_bands, label, color, name),
             use_container_width=True,
@@ -320,6 +350,25 @@ def _render_montecarlo_tab() -> None:
     with col_b:
         st.plotly_chart(
             compare_cdfs(mc.puro.final_values, mc.tactico.final_values, name),
+            use_container_width=True,
+        )
+
+    # Same comparison but on % total return (per-sim value / per-sim invested - 1).
+    returns_puro = mc.puro.final_values / np.where(
+        mc.puro.total_invested > 0, mc.puro.total_invested, np.nan
+    ) - 1.0
+    returns_tactico = mc.tactico.final_values / np.where(
+        mc.tactico.total_invested > 0, mc.tactico.total_invested, np.nan
+    ) - 1.0
+    col_c, col_d = st.columns(2)
+    with col_c:
+        st.plotly_chart(
+            compare_histograms_returns(returns_puro, returns_tactico, name),
+            use_container_width=True,
+        )
+    with col_d:
+        st.plotly_chart(
+            compare_cdfs_returns(returns_puro, returns_tactico, name),
             use_container_width=True,
         )
 

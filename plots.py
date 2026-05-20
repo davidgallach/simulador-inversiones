@@ -129,9 +129,17 @@ def fan_chart(
 
 
 def _vline(fig: go.Figure, x: float, color: str, label: str, dash: str = "dash") -> None:
+    """Vertical reference line. Annotations are rotated 90° so neighbouring
+    labels don't overlap horizontally even when the lines are close in x."""
     fig.add_vline(
-        x=x, line=dict(color=color, width=2, dash=dash),
-        annotation_text=label, annotation_position="top",
+        x=x,
+        line=dict(color=color, width=2, dash=dash),
+        annotation_text=label,
+        annotation_position="top",
+        annotation_textangle=-90,
+        annotation_yanchor="bottom",
+        annotation_font=dict(size=11, color=color),
+        annotation_xshift=10,
     )
 
 
@@ -159,6 +167,7 @@ def histogram(
         xaxis_title=S.AXIS_VALUE_EUR,
         yaxis_title=S.AXIS_FREQ,
         showlegend=False,
+        margin=dict(t=110),  # room for rotated vertical-line labels
     )
     return fig
 
@@ -217,6 +226,7 @@ def cdf_chart(
         xaxis_title=S.AXIS_VALUE_EUR,
         yaxis_title=S.AXIS_PROB,
         showlegend=False,
+        margin=dict(t=110),
     )
     return fig
 
@@ -264,5 +274,100 @@ def compare_cdfs(
         title=f"{S.MC_COMPARE_CDF} — {investment_name}",
         xaxis_title=S.AXIS_VALUE_EUR,
         yaxis_title=S.AXIS_PROB,
+    )
+    return fig
+
+
+def compare_histograms_returns(
+    returns_puro: np.ndarray,
+    returns_tactico: np.ndarray,
+    investment_name: str,
+) -> go.Figure:
+    """Overlaid histograms of total return in % across both strategies."""
+    fig = go.Figure()
+    fig.add_trace(go.Histogram(
+        x=returns_puro * 100.0, nbinsx=80, name=S.LABEL_PURO,
+        marker=dict(color=_hex_to_rgba(COLOR_PURO, 0.5)),
+    ))
+    fig.add_trace(go.Histogram(
+        x=returns_tactico * 100.0, nbinsx=80, name=S.LABEL_TACTICO,
+        marker=dict(color=_hex_to_rgba(COLOR_TACTICO, 0.5)),
+    ))
+    fig.update_layout(
+        title=f"{S.MC_COMPARE_HIST_RETURN} — {investment_name}",
+        barmode="overlay",
+        xaxis_title=S.AXIS_RETURN_PCT,
+        yaxis_title=S.AXIS_FREQ,
+    )
+    return fig
+
+
+def compare_cdfs_returns(
+    returns_puro: np.ndarray,
+    returns_tactico: np.ndarray,
+    investment_name: str,
+) -> go.Figure:
+    fig = go.Figure()
+    for arr, label, color in [
+        (returns_puro, S.LABEL_PURO, COLOR_PURO),
+        (returns_tactico, S.LABEL_TACTICO, COLOR_TACTICO),
+    ]:
+        sorted_arr = np.sort(np.asarray(arr, dtype=float)) * 100.0
+        cdf = np.arange(1, sorted_arr.size + 1) / sorted_arr.size
+        fig.add_trace(go.Scatter(
+            x=sorted_arr, y=cdf, mode="lines",
+            line=dict(color=color, width=2), name=label,
+        ))
+    fig.update_layout(
+        title=f"{S.MC_COMPARE_CDF_RETURN} — {investment_name}",
+        xaxis_title=S.AXIS_RETURN_PCT,
+        yaxis_title=S.AXIS_PROB,
+    )
+    return fig
+
+
+def spaghetti_chart(
+    trajectories: np.ndarray,
+    strategy_label: str,
+    color: str,
+    investment_name: str,
+) -> go.Figure:
+    """Plot all simulated trajectories with very low opacity (density visualization).
+
+    Uses one WebGL trace with NaN separators between paths — fast enough for
+    10 000 × ~240-step paths in the browser. Median overlaid on top in solid.
+    """
+    arr = np.asarray(trajectories, dtype=float)
+    n_sims, n_steps = arr.shape
+    months = np.arange(n_steps, dtype=float)
+
+    # Build a single (x, y) sequence: [path_0, NaN, path_1, NaN, ..., path_{n-1}]
+    sep = np.full(n_sims, np.nan)
+    xs = np.concatenate([
+        np.tile(months, n_sims).reshape(n_sims, n_steps),
+        sep[:, None],
+    ], axis=1).ravel()
+    ys = np.concatenate([arr, sep[:, None]], axis=1).ravel()
+
+    median = np.percentile(arr, 50, axis=0)
+
+    fig = go.Figure()
+    fig.add_trace(go.Scattergl(
+        x=xs, y=ys, mode="lines",
+        line=dict(color=color, width=1),
+        opacity=0.02,
+        name="Trayectorias",
+        hoverinfo="skip",
+        showlegend=False,
+    ))
+    fig.add_trace(go.Scatter(
+        x=months, y=median, mode="lines",
+        line=dict(color=color, width=2.5),
+        name="Mediana",
+    ))
+    fig.update_layout(
+        title=f"{S.MC_SPAGHETTI} — {strategy_label} — {investment_name}",
+        xaxis_title=S.AXIS_MONTH,
+        yaxis_title=S.AXIS_VALUE_EUR,
     )
     return fig

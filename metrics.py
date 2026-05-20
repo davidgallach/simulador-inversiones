@@ -67,6 +67,31 @@ def time_weighted_returns(result: StrategyResult) -> np.ndarray:
     return rets
 
 
+def total_return(result: StrategyResult) -> float:
+    """Simple total return: (final_value - total_invested) / total_invested."""
+    if result.total_invested <= 0:
+        return float("nan")
+    return result.final_value / result.total_invested - 1.0
+
+
+def twr_cumulative(result: StrategyResult) -> float:
+    """Cumulative time-weighted return: product of (1 + monthly TWR) - 1."""
+    rets = time_weighted_returns(result)
+    if rets.size == 0:
+        return float("nan")
+    return float(np.prod(1.0 + rets) - 1.0)
+
+
+def twr_annualized(result: StrategyResult) -> float:
+    """Annualized TWR. With N monthly returns spanning N months elapsed:
+    annual = (1 + cumulative_twr)^(12/N) - 1."""
+    rets = time_weighted_returns(result)
+    if rets.size == 0:
+        return float("nan")
+    cum = float(np.prod(1.0 + rets) - 1.0)
+    return (1.0 + cum) ** (12.0 / rets.size) - 1.0
+
+
 def volatility_annualized(result: StrategyResult) -> float:
     rets = time_weighted_returns(result)
     if rets.size < 2:
