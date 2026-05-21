@@ -6,7 +6,7 @@ import pandas as pd
 import streamlit as st
 
 import strings as S
-from data import DataError, fetch_prices
+from data import DataError, fetch_leveraged_prices, fetch_prices
 from metrics import (
     cagr,
     max_drawdown,
@@ -71,14 +71,37 @@ def _check_password() -> bool:
 # ---------------- Sidebar ----------------
 
 def _render_sidebar() -> dict | None:
-    # The form batches all widget edits until the submit button is pressed, so
-    # typing in a field does not trigger a Streamlit rerun (which would
-    # otherwise rebuild every Plotly figure from the cached MC result).
+    # The asset-mode radio lives OUTSIDE the form so toggling it triggers a
+    # rerun and the form re-renders with the leverage input (which only exists
+    # in leveraged mode). This rerun is fine — the mode is set at most once
+    # per session and no MC figures get rebuilt because no `sim` is cached yet
+    # or the user is intentionally reconfiguring.
+    #
+    # All other inputs live inside the form so typing edits don't rerun the
+    # script and don't rebuild the (heavy) Plotly figures from cached `mc`.
     with st.sidebar:
         st.header(S.SIDEBAR_HEADER)
+        asset_mode = st.radio(
+            S.INPUT_ASSET_MODE,
+            options=[S.ASSET_MODE_NORMAL, S.ASSET_MODE_LEVERAGED],
+            index=0,
+            key="asset_mode",
+        )
+        is_leveraged = asset_mode == S.ASSET_MODE_LEVERAGED
+
         with st.form("sidebar_form", clear_on_submit=False):
             name = st.text_input(S.INPUT_NAME, value="Mi inversión")
-            ticker = st.text_input(S.INPUT_TICKER, value="SPY")
+            ticker = st.text_input(
+                S.INPUT_BASE_TICKER if is_leveraged else S.INPUT_TICKER,
+                value="SPY",
+            )
+            if is_leveraged:
+                leverage = st.number_input(
+                    S.INPUT_LEVERAGE,
+                    min_value=-10, max_value=10, value=3, step=1,
+                )
+            else:
+                leverage = None
             initial = st.number_input(
                 S.INPUT_INITIAL, min_value=0.0, value=1000.0, step=100.0
             )
@@ -103,6 +126,8 @@ def _render_sidebar() -> dict | None:
             "monthly": float(monthly),
             "years_hist": int(years_hist),
             "years_mc": int(years_mc),
+            "leveraged": is_leveraged,
+            "leverage": int(leverage) if is_leveraged else None,
         }
     return None
 
@@ -114,7 +139,12 @@ def _run_pipeline(params: dict) -> bool:
     Returns True on success, False (and shows a Spanish error) on failure."""
     try:
         with st.spinner(f"Descargando histórico de {params['ticker']}..."):
-            price_data = fetch_prices(params["ticker"], params["years_hist"])
+            if params.get("leveraged"):
+                price_data = fetch_leveraged_prices(
+                    params["ticker"], params["leverage"], params["years_hist"]
+                )
+            else:
+                price_data = fetch_prices(params["ticker"], params["years_hist"])
     except DataError as exc:
         code = str(exc)
         if code.startswith("INSUFFICIENT_HISTORY"):
@@ -206,6 +236,14 @@ def _render_historical_tab() -> None:
     name = sim["params"]["name"]
     res_puro: StrategyResult = sim["puro"]
     res_tactico: StrategyResult = sim["tactico"]
+
+    if sim["params"].get("leveraged"):
+        st.info(
+            S.LEVERAGED_CAPTION.format(
+                leverage=sim["params"]["leverage"],
+                base=sim["params"]["ticker"],
+            )
+        )
 
     st.subheader(S.HIST_SUMMARY_TITLE)
     st.caption(S.HIST_SHARPE_NOTE)

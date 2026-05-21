@@ -21,11 +21,21 @@ APP_SUBTITLE = (
 SIDEBAR_HEADER = "Parámetros de la simulación"
 INPUT_NAME = "Nombre de la inversión"
 INPUT_TICKER = "Ticker o ISIN"
+INPUT_BASE_TICKER = "Ticker o ISIN del activo base"
+INPUT_ASSET_MODE = "Tipo de activo"
+ASSET_MODE_NORMAL = "Activo normal"
+ASSET_MODE_LEVERAGED = "Activo apalancado sintético (reset diario)"
+INPUT_LEVERAGE = "Apalancamiento diario (entero, -10..10)"
 INPUT_INITIAL = "Inversión inicial (€)"
 INPUT_MONTHLY = "Inversión mensual (€)"
 INPUT_YEARS_HIST = "Años de histórico a usar"
 INPUT_YEARS_MC = "Años a simular en el Montecarlo"
 RUN_BUTTON = "Ejecutar simulación"
+LEVERAGED_CAPTION = (
+    "Activo sintético construido aplicando apalancamiento diario "
+    "({leverage:+d}×) sobre {base}. Reset diario; sin comisiones ni "
+    "coste de financiación en este modelo."
+)
 
 # Disclaimer
 DISCLAIMER = (
