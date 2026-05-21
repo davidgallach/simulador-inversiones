@@ -71,24 +71,29 @@ def _check_password() -> bool:
 # ---------------- Sidebar ----------------
 
 def _render_sidebar() -> dict | None:
-    st.sidebar.header(S.SIDEBAR_HEADER)
-    name = st.sidebar.text_input(S.INPUT_NAME, value="Mi inversión")
-    ticker = st.sidebar.text_input(S.INPUT_TICKER, value="SPY")
-    initial = st.sidebar.number_input(
-        S.INPUT_INITIAL, min_value=0.0, value=1000.0, step=100.0
-    )
-    monthly = st.sidebar.number_input(
-        S.INPUT_MONTHLY, min_value=0.0, value=200.0, step=50.0
-    )
-    years_hist = st.sidebar.number_input(
-        S.INPUT_YEARS_HIST, min_value=1, max_value=50, value=10, step=1
-    )
-    years_mc = st.sidebar.number_input(
-        S.INPUT_YEARS_MC, min_value=1, max_value=50, value=20, step=1
-    )
-    run = st.sidebar.button(S.RUN_BUTTON, type="primary")
-    st.sidebar.markdown("---")
-    st.sidebar.caption(S.DISCLAIMER)
+    # The form batches all widget edits until the submit button is pressed, so
+    # typing in a field does not trigger a Streamlit rerun (which would
+    # otherwise rebuild every Plotly figure from the cached MC result).
+    with st.sidebar:
+        st.header(S.SIDEBAR_HEADER)
+        with st.form("sidebar_form", clear_on_submit=False):
+            name = st.text_input(S.INPUT_NAME, value="Mi inversión")
+            ticker = st.text_input(S.INPUT_TICKER, value="SPY")
+            initial = st.number_input(
+                S.INPUT_INITIAL, min_value=0.0, value=1000.0, step=100.0
+            )
+            monthly = st.number_input(
+                S.INPUT_MONTHLY, min_value=0.0, value=200.0, step=50.0
+            )
+            years_hist = st.number_input(
+                S.INPUT_YEARS_HIST, min_value=1, max_value=50, value=10, step=1
+            )
+            years_mc = st.number_input(
+                S.INPUT_YEARS_MC, min_value=1, max_value=50, value=20, step=1
+            )
+            run = st.form_submit_button(S.RUN_BUTTON, type="primary")
+        st.markdown("---")
+        st.caption(S.DISCLAIMER)
 
     if run:
         return {
