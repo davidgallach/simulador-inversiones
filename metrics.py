@@ -210,6 +210,25 @@ def prob_loss_given_ruin(
     return float(np.mean(loss[hit]))
 
 
+def prob_deep_drawdown(
+    trajectories,
+    invested_trajectories,
+    fraction: float = 0.10,
+) -> float:
+    """Fraction of sims where portfolio value drops below `fraction` of
+    cumulative invested capital at any t >= 1 where money has already
+    been deployed. Scale-invariant 'severe drawdown' metric: at fraction=0.1,
+    this measures P(at some point the portfolio was worth < 10 % of what
+    had been put in by that time)."""
+    arr = np.asarray(trajectories, dtype=float)
+    inv = np.asarray(invested_trajectories, dtype=float)
+    if arr.ndim != 2 or arr.shape != inv.shape or arr.shape[1] < 2:
+        return float("nan")
+    deployed = inv[:, 1:] > 0
+    below = (arr[:, 1:] < fraction * inv[:, 1:]) & deployed
+    return float(np.mean(np.any(below, axis=1)))
+
+
 def percentiles(final_values, percentile_list=(10, 20, 30, 40, 60, 70, 80, 90)) -> dict:
     arr = np.asarray(final_values, dtype=float).ravel()
     if arr.size == 0:

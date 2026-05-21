@@ -11,6 +11,7 @@ from metrics import (
     cagr,
     max_drawdown,
     percentiles,
+    prob_deep_drawdown,
     prob_loss_given_ruin,
     prob_profit_above,
     prob_ruin_path,
@@ -350,6 +351,11 @@ def _render_montecarlo_tab() -> None:
                     strat.final_values,
                     strat.total_invested,
                     invested_trajectories=strat.invested_trajectories,
+                )
+            ),
+            S.MC_PROB_DEEP_DRAWDOWN: _format_pct(
+                prob_deep_drawdown(
+                    strat.trajectories, strat.invested_trajectories, fraction=0.10
                 )
             ),
             S.MC_PROB_NEG: _format_pct(

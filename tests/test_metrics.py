@@ -10,6 +10,7 @@ from metrics import (
     cagr,
     cashflows,
     max_drawdown,
+    prob_deep_drawdown,
     prob_loss_given_ruin,
     prob_profit_above,
     prob_ruin_path,
@@ -167,6 +168,36 @@ def test_prob_ruin_path_invested_mask_ignores_pre_deployment():
     assert prob_ruin_path(traj, invested) == pytest.approx(0.5)
     # Without the mask, the first sim is wrongly flagged (V<1 at t=1,2).
     assert prob_ruin_path(traj) == pytest.approx(1.0)
+
+
+def test_prob_deep_drawdown_fires_at_10pct_threshold():
+    """V_t < 0.10 · invested[t] at some t (with invested[t] > 0) counts."""
+    traj = np.array([
+        [1000.0, 1500.0, 2000.0, 2500.0],   # always well above 10% of invested
+        [1000.0,    50.0, 2000.0, 2500.0],   # V=50 at t=1 vs invested=1200 → 4.2% → hit
+        [1000.0,  1000.0,  150.0,  500.0],   # V=150 at t=2 vs invested=1400 → 10.7% → no hit
+    ])
+    invested = np.array([
+        [1000.0, 1200.0, 1400.0, 1600.0],
+        [1000.0, 1200.0, 1400.0, 1600.0],
+        [1000.0, 1200.0, 1400.0, 1600.0],
+    ])
+    assert prob_deep_drawdown(traj, invested, fraction=0.10) == pytest.approx(1 / 3)
+
+
+def test_prob_deep_drawdown_respects_deployment_mask():
+    """Pre-deployment steps (invested=0) must not be flagged even though
+    V_t < 0.10 · 0 trivially holds for any V > 0 ... wait, it doesn't —
+    V_t < 0 is false. But also invested=0 means we should explicitly skip."""
+    traj = np.array([
+        [0.0, 0.0, 100.0, 1000.0],       # money first deployed at t=2; never deep DD
+        [0.0, 0.0, 100.0,    5.0],       # deep DD at t=3: V=5 vs invested=200 → 2.5%
+    ])
+    invested = np.array([
+        [0.0, 0.0, 100.0, 200.0],
+        [0.0, 0.0, 100.0, 200.0],
+    ])
+    assert prob_deep_drawdown(traj, invested, fraction=0.10) == pytest.approx(0.5)
 
 
 def test_prob_loss_given_ruin_invested_mask():
