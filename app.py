@@ -298,10 +298,15 @@ def _render_montecarlo_tab() -> None:
     for label, strat in [(S.LABEL_PURO, mc.puro), (S.LABEL_TACTICO, mc.tactico)]:
         prob_rows.append({
             S.HIST_COL_STRATEGY: label,
-            S.MC_PROB_RUIN: _format_pct(prob_ruin_path(strat.trajectories)),
+            S.MC_PROB_RUIN: _format_pct(
+                prob_ruin_path(strat.trajectories, strat.invested_trajectories)
+            ),
             S.MC_PROB_LOSS_GIVEN_RUIN: _format_pct(
                 prob_loss_given_ruin(
-                    strat.trajectories, strat.final_values, strat.total_invested
+                    strat.trajectories,
+                    strat.final_values,
+                    strat.total_invested,
+                    invested_trajectories=strat.invested_trajectories,
                 )
             ),
             S.MC_PROB_NEG: _format_pct(

@@ -26,6 +26,37 @@ def _hex_to_rgba(hex_color: str, alpha: float) -> str:
     return f"rgba({r},{g},{b},{alpha})"
 
 
+# Percentile used to clip the right tail of distribution plots so that a few
+# extreme outliers don't make the rest of the chart unreadable.
+CLIP_PERCENTILE = 99.5
+
+
+def _clipped_x_range(arrays, extras=()):
+    """[lo, hi] for the X axis: lo = data min, hi = P99.5 of combined data,
+    extended to include any `extras` (vertical-line positions) and padded 2%."""
+    combined = np.concatenate([
+        np.asarray(a, dtype=float).ravel() for a in arrays if a is not None
+    ])
+    combined = combined[np.isfinite(combined)]
+    if combined.size == 0:
+        return None
+    lo = float(np.min(combined))
+    hi = float(np.percentile(combined, CLIP_PERCENTILE))
+    for x in extras:
+        if x is None:
+            continue
+        x = float(x)
+        if not np.isfinite(x):
+            continue
+        lo = min(lo, x)
+        hi = max(hi, x)
+    span = hi - lo
+    if span <= 0:
+        return None
+    pad = 0.02 * span
+    return [lo - pad, hi + pad]
+
+
 def portfolio_value_chart(
     dates: pd.DatetimeIndex,
     values_puro: np.ndarray,
@@ -162,10 +193,14 @@ def histogram(
     _vline(fig, median_v, COLOR_MEDIAN, f"{S.MC_STAT_MEDIAN}: {median_v:,.0f} €")
     _vline(fig, total_invested_mean, COLOR_INVESTED,
            f"{S.HIST_LEGEND_INVESTED}: {total_invested_mean:,.0f} €", dash="dot")
+    x_range = _clipped_x_range(
+        [final_values], extras=[mean_v, median_v, total_invested_mean]
+    )
     fig.update_layout(
         title=f"{S.MC_HIST_CHART} — {strategy_label} — {investment_name}",
         xaxis_title=S.AXIS_VALUE_EUR,
         yaxis_title=S.AXIS_FREQ,
+        xaxis_range=x_range,
         showlegend=False,
         margin=dict(t=110),  # room for rotated vertical-line labels
     )
@@ -179,9 +214,9 @@ def pdf_chart(
     investment_name: str,
 ) -> go.Figure:
     arr = np.asarray(final_values, dtype=float)
-    # Clip the KDE evaluation range to avoid huge tails.
-    lo = float(np.percentile(arr, 0.5))
-    hi = float(np.percentile(arr, 99.5))
+    # KDE evaluated on [data_min, P99.5] to cut huge tails.
+    lo = float(np.min(arr))
+    hi = float(np.percentile(arr, CLIP_PERCENTILE))
     xs = np.linspace(lo, hi, 500)
     kde = gaussian_kde(arr)
     ys = kde(xs)
@@ -221,10 +256,15 @@ def cdf_chart(
            f"{S.HIST_LEGEND_INVESTED}: {total_invested_mean:,.0f} €", dash="dot")
     _vline(fig, total_invested_mean + target_x, COLOR_TARGET,
            f"+ X: {total_invested_mean + target_x:,.0f} €")
+    x_range = _clipped_x_range(
+        [final_values],
+        extras=[1.0, total_invested_mean, total_invested_mean + target_x],
+    )
     fig.update_layout(
         title=f"{S.MC_CDF_CHART} — {strategy_label} — {investment_name}",
         xaxis_title=S.AXIS_VALUE_EUR,
         yaxis_title=S.AXIS_PROB,
+        xaxis_range=x_range,
         showlegend=False,
         margin=dict(t=110),
     )
@@ -250,6 +290,7 @@ def compare_histograms(
         barmode="overlay",
         xaxis_title=S.AXIS_VALUE_EUR,
         yaxis_title=S.AXIS_FREQ,
+        xaxis_range=_clipped_x_range([final_puro, final_tactico]),
     )
     return fig
 
@@ -274,6 +315,7 @@ def compare_cdfs(
         title=f"{S.MC_COMPARE_CDF} — {investment_name}",
         xaxis_title=S.AXIS_VALUE_EUR,
         yaxis_title=S.AXIS_PROB,
+        xaxis_range=_clipped_x_range([final_puro, final_tactico]),
     )
     return fig
 
@@ -298,6 +340,9 @@ def compare_histograms_returns(
         barmode="overlay",
         xaxis_title=S.AXIS_RETURN_PCT,
         yaxis_title=S.AXIS_FREQ,
+        xaxis_range=_clipped_x_range(
+            [returns_puro * 100.0, returns_tactico * 100.0]
+        ),
     )
     return fig
 
@@ -322,6 +367,9 @@ def compare_cdfs_returns(
         title=f"{S.MC_COMPARE_CDF_RETURN} — {investment_name}",
         xaxis_title=S.AXIS_RETURN_PCT,
         yaxis_title=S.AXIS_PROB,
+        xaxis_range=_clipped_x_range(
+            [returns_puro * 100.0, returns_tactico * 100.0]
+        ),
     )
     return fig
 

@@ -150,14 +150,37 @@ def prob_profit_above(final_values, total_invested: float, x: float) -> float:
     return float(np.mean((arr - total_invested) > x))
 
 
-def prob_ruin_path(trajectories, threshold: float = 1.0) -> float:
-    """Fraction of simulations whose portfolio value drops below `threshold`
-    at any t >= 1. Month 0 is excluded so an initial = 0 € setup does not
-    trivially flag every sim."""
+def _ruin_mask(trajectories, invested_trajectories, threshold: float):
+    """Per-sim boolean: True if V_t < threshold at some t >= 1 where money has
+    already been deployed (cumulative invested[t] > 0). Returns None on bad shapes.
+
+    The deployment guard avoids flagging the 'waiting period' before any cash
+    has been invested (e.g. DCA Táctico with initial=0 holding the pool while
+    no down-month has triggered a buy yet)."""
     arr = np.asarray(trajectories, dtype=float)
     if arr.ndim != 2 or arr.shape[1] < 2:
+        return None
+    below = arr[:, 1:] < threshold
+    if invested_trajectories is not None:
+        inv = np.asarray(invested_trajectories, dtype=float)
+        if inv.shape != arr.shape:
+            return None
+        below = below & (inv[:, 1:] > 0)
+    return np.any(below, axis=1)
+
+
+def prob_ruin_path(
+    trajectories,
+    invested_trajectories=None,
+    threshold: float = 1.0,
+) -> float:
+    """Fraction of simulations whose portfolio value drops below `threshold`
+    at any t >= 1 where money has already been deployed. If
+    `invested_trajectories` is provided, steps with cumulative invested = 0
+    are skipped (handles initial=0 setups, especially DCA Táctico)."""
+    hit = _ruin_mask(trajectories, invested_trajectories, threshold)
+    if hit is None:
         return float("nan")
-    hit = np.any(arr[:, 1:] < threshold, axis=1)
     return float(np.mean(hit))
 
 
@@ -165,16 +188,19 @@ def prob_loss_given_ruin(
     trajectories,
     final_values,
     total_invested,
+    invested_trajectories=None,
     threshold: float = 1.0,
 ) -> float:
-    """Conditional probability: among sims that hit `< threshold` at any t >= 1,
-    fraction ending with final_value < total_invested. NaN if no sim hits ruin.
+    """Conditional probability: among sims that hit `< threshold` (with the
+    same deployment guard as prob_ruin_path), fraction ending with
+    final_value < total_invested. NaN if no sim hits ruin.
     `total_invested` may be scalar or a per-sim array."""
-    traj = np.asarray(trajectories, dtype=float)
-    finals = np.asarray(final_values, dtype=float).ravel()
-    if traj.ndim != 2 or traj.shape[1] < 2 or finals.size != traj.shape[0]:
+    hit = _ruin_mask(trajectories, invested_trajectories, threshold)
+    if hit is None:
         return float("nan")
-    hit = np.any(traj[:, 1:] < threshold, axis=1)
+    finals = np.asarray(final_values, dtype=float).ravel()
+    if finals.size != hit.size:
+        return float("nan")
     if not np.any(hit):
         return float("nan")
     inv = np.asarray(total_invested, dtype=float)

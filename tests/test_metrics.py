@@ -149,3 +149,39 @@ def test_prob_loss_given_ruin_no_ruin_is_nan():
     traj = np.array([[1000.0, 1100.0, 1200.0]])
     finals = traj[:, -1]
     assert math.isnan(prob_loss_given_ruin(traj, finals, 1000.0))
+
+
+def test_prob_ruin_path_invested_mask_ignores_pre_deployment():
+    """initial=0 case: V_t=0 during the waiting period (invested[t]=0) must
+    NOT be flagged as ruin. Only steps with money already deployed count."""
+    # Sim 1: money first deployed at t=3, V=0 during waiting → no ruin.
+    # Sim 2: money first deployed at t=3, then drops to 0.5 at t=4 → ruin.
+    traj = np.array([
+        [0.0, 0.0, 0.0, 100.0, 200.0],
+        [0.0, 0.0, 0.0, 100.0,   0.5],
+    ])
+    invested = np.array([
+        [0.0, 0.0, 0.0, 100.0, 200.0],
+        [0.0, 0.0, 0.0, 100.0, 200.0],
+    ])
+    assert prob_ruin_path(traj, invested) == pytest.approx(0.5)
+    # Without the mask, the first sim is wrongly flagged (V<1 at t=1,2).
+    assert prob_ruin_path(traj) == pytest.approx(1.0)
+
+
+def test_prob_loss_given_ruin_invested_mask():
+    """Same masking applies to the conditional: pre-deployment dips don't
+    count as ruin, so they don't enter the denominator either."""
+    traj = np.array([
+        [0.0, 0.0, 100.0, 200.0],   # no ruin (V=0 only during waiting)
+        [0.0, 0.0,   0.5,  50.0],   # ruin after deployment, ends with loss
+        [0.0, 0.0,   0.5, 500.0],   # ruin after deployment, ends with gain
+    ])
+    invested = np.array([
+        [0.0, 0.0, 100.0, 200.0],
+        [0.0, 0.0, 100.0, 200.0],
+        [0.0, 0.0, 100.0, 200.0],
+    ])
+    finals = traj[:, -1]
+    # 2 sims hit ruin (rows 1, 2), 1 has loss → 0.5.
+    assert prob_loss_given_ruin(traj, finals, 200.0, invested) == pytest.approx(0.5)

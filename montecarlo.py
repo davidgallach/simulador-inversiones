@@ -23,6 +23,7 @@ class StrategySim:
     total_invested: np.ndarray         # shape (n_sims,) — money actually deployed per sim
     percentile_bands: dict             # {p: ndarray of length n_steps}
     trajectories: np.ndarray           # shape (n_sims, n_steps) — full portfolio paths
+    invested_trajectories: np.ndarray  # shape (n_sims, n_steps) — cumulative € deployed
     n_steps: int
 
 
@@ -167,6 +168,7 @@ def simulate(
         total_invested=invested_puro[:, -1],
         percentile_bands=_bands(values_puro),
         trajectories=values_puro,
+        invested_trajectories=invested_puro,
         n_steps=n_steps,
     )
     tactico_sim = StrategySim(
@@ -174,6 +176,7 @@ def simulate(
         total_invested=invested_tactico[:, -1],
         percentile_bands=_bands(values_tactico),
         trajectories=values_tactico,
+        invested_trajectories=invested_tactico,
         n_steps=n_steps,
     )
     return SimResult(
